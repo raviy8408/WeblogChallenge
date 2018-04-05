@@ -59,9 +59,9 @@ raw_data_w_cols = raw_data \
 
 ##################################################################################
 
-###########################################################################################3
+###########################################################################################
 # SECTION 1 : Processing & Analytical goals
-###########################################################################################3
+###########################################################################################
 
 # Q1: Sessionize the web log by IP. Sessionize = aggregrate all page hits by visitor/IP during a fixed time window.
 
@@ -72,17 +72,52 @@ _sessionized = raw_data_w_cols \
     .withColumn("URL",
                 lower(split(split(col("request_split").getItem(1), "/").getItem(2), ":").getItem(0).cast(StringType()))) \
     .withColumn("http_version", col("request_split").getItem(2)) \
-    .withColumn("temp_tmpstmp", to_utc_timestamp(col("timestamp"), "ISO 8601")) \
-    .withColumn("lagged_tmpstmp", lag(col("temp_tmpstmp"), 1).over(Window.partitionBy("IP").orderBy("temp_tmpstmp"))) \
+    .withColumn("unix_tmpstmp", to_utc_timestamp(col("timestamp"), "ISO 8601")) \
+    .withColumn("lagged_tmpstmp", lag(col("unix_tmpstmp"), 1).over(Window.partitionBy("IP").orderBy("unix_tmpstmp"))) \
     .withColumn("new_session",
-                coalesce(unix_timestamp(col("temp_tmpstmp")) - unix_timestamp(col("lagged_tmpstmp")), lit(0.0)).cast(
+                coalesce(unix_timestamp(col("unix_tmpstmp")) - unix_timestamp(col("lagged_tmpstmp")), lit(0.0)).cast(
                     FloatType()) > 1800.0) \
     .withColumn("sessionized_temp", sum(when(col("new_session") == False, 0.0).otherwise(1.0)).over(
-    Window.partitionBy("IP").orderBy("temp_tmpstmp"))) \
+    Window.partitionBy("IP").orderBy("unix_tmpstmp"))) \
     .withColumn("sessionized", concat_ws("_", col("IP").cast(StringType()), lit("Session"),
                                          col("sessionized_temp").cast(StringType()))) \
-    .orderBy(["IP", "temp_tmpstmp"])
+    .drop("new_session") \
+    .drop("sessionized_temp") \
+    .repartition(REPARTITION_FACTOR)
 
-print("Solution 1")
+print("SECTION 1: \n")
+print("Solution 1:")
 _sessionized.show(10)
+print("##################################################\n")
+
+# Q2: Determine the average session time
+
+_session_time = _sessionized \
+    .groupBy(["IP", "sessionized"]) \
+    .agg(max(col("unix_tmpstmp")).alias("session_end_time"),
+         min(col("unix_tmpstmp")).alias("session_start_time")) \
+    .withColumn("session_time", (unix_timestamp("session_end_time") - unix_timestamp("session_start_time")) / 60.0)
+
+print("Solution 2:")
+_session_time.describe(['session_time']).show()
+print("##################################################\n")
+
+# Q3: Determine unique URL visits per session. To clarify, count a hit to a unique URL only once per session.
+
+_URL_visit_count = _sessionized \
+    .groupBy(["sessionized"]) \
+    .agg(countDistinct("URL").alias("URL_count"))
+
+print("Solution 3:")
+_URL_visit_count.show(10)
+print("##################################################\n")
+
+# Q4: Find the most engaged users, ie the IPs with the longest session times
+
+_user_avg_session_time = _session_time.groupBy(["IP"]) \
+    .agg(mean("session_time").alias("avg_time")) \
+    .orderBy(["avg_time"], ascending=[0])
+
+print("Solution 4:")
+_user_avg_session_time.show(10)
 print("##################################################\n")

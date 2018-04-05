@@ -120,6 +120,6 @@ _URL_visit_count = _sessionized \
 
 # _session_time.show(50)
 
-_session_time.groupBy(["IP"]).agg(mean("session_time").alias("avg_time")).orderBy(["avg_time"], ascending=[0]).show()
+# _session_time.groupBy(["IP"]).agg(mean("session_time").alias("avg_time")).orderBy(["avg_time"], ascending=[0]).show()
 # _session_time.describe(['session_time']).show()
 # _URL_visit_count.show(10)
