@@ -17,8 +17,8 @@ sc.setLogLevel("ERROR")
 REPARTITION_FACTOR = int(sc._jsc.sc().getExecutorMemoryStatus().size()) * 10
 print(REPARTITION_FACTOR)
 
-raw_data = spark.read.option("delimiter", " ").csv("C://Users/Ravi/PycharmProjects/WeblogChallenge/data") \
-    .sample(False, 0.01, 42)
+raw_data = spark.read.option("delimiter", " ").csv("C://Users/Ravi/PycharmProjects/WeblogChallenge/data")
+# .sample(False, 0.01, 42)
 
 # print(raw_data.count())
 
@@ -41,6 +41,14 @@ raw_data_w_cols = raw_data \
     .repartition(REPARTITION_FACTOR)
 
 # raw_data_w_cols.show()
+raw_data_w_cols \
+    .replace(["-1"], []) \
+    .select(col("request_processing_time").cast(FloatType()),
+            col("backend_processing_time").cast(FloatType()),
+            col("response_processing_time").cast(FloatType())
+            ) \
+    .describe() \
+    .show()
 
 _requests = raw_data_w_cols \
     .select(col("request")) \
@@ -64,10 +72,34 @@ _website = _requests \
 
 
 _timestamp = raw_data_w_cols \
-    .select(col("timestamp")) \
-    .withColumn("temp_tmpstmp", to_utc_timestamp(col("timestamp"), "ISO 8601"))
-
-# _timestamp.show(5)
+    .withColumn("IP", split(col("client"), ":").getItem(0)) \
+    .withColumn("request_split", split(col("request"), " ")) \
+    .withColumn("request_type", col("request_split").getItem(0)) \
+    .withColumn("URL",
+                lower(split(split(col("request_split").getItem(1), "/").getItem(2), ":").getItem(0).cast(StringType()))) \
+    .withColumn("http_version", col("request_split").getItem(2)) \
+    .withColumn("temp_tmpstmp", to_utc_timestamp(col("timestamp"), "ISO 8601")) \
+    .withColumn("date", to_date(col("temp_tmpstmp"))) \
+    .withColumn("hour", hour(col("temp_tmpstmp"))) \
+    .withColumn("minute", minute(col("temp_tmpstmp"))) \
+    .withColumn("dummy_count", lit(1.0)) \
+    .replace(["\"GET"], ["GET"], "request_type") \
+    .withColumn("row_count", count(col("date")).over(
+    Window.partitionBy(["date", "hour", "minute"]).orderBy("date").rangeBetween(-sys.maxsize, sys.maxsize))) \
+    .withColumn("avg_request_processing_time", mean(col("request_processing_time").cast(FloatType())).over(
+    Window.partitionBy(["date", "hour", "minute"]).orderBy("date").rangeBetween(-sys.maxsize, sys.maxsize))) \
+    .withColumn("avg_backend_processing_time", mean(col("backend_processing_time").cast(FloatType())).over(
+    Window.partitionBy(["date", "hour", "minute"]).orderBy("date").rangeBetween(-sys.maxsize, sys.maxsize))) \
+    .withColumn("avg_response_processing_time", mean(col("response_processing_time").cast(FloatType())).over(
+    Window.partitionBy(["date", "hour", "minute"]).orderBy("date").rangeBetween(-sys.maxsize, sys.maxsize))) \
+    .groupBy(["date", "hour", "minute", "row_count", "avg_request_processing_time", "avg_backend_processing_time",
+              "avg_response_processing_time"]) \
+    .pivot("request_type").sum("dummy_count") \
+    .na.fill(0.0)
+#
+# _timestamp.show(15)
+# _timestamp.describe().show()
+# _timestamp.select(col("request_type_clean")).distinct().show()
 # print(_timestamp.take(1))
 
 
@@ -123,3 +155,5 @@ _URL_visit_count = _sessionized \
 # _session_time.groupBy(["IP"]).agg(mean("session_time").alias("avg_time")).orderBy(["avg_time"], ascending=[0]).show()
 # _session_time.describe(['session_time']).show()
 # _URL_visit_count.show(10)
+
+# print(raw_data_w_cols.select("elb").distinct().count())
