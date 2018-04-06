@@ -41,12 +41,24 @@ raw_data_w_cols = raw_data \
     .repartition(REPARTITION_FACTOR)
 
 # raw_data_w_cols.show()
+# raw_data_w_cols \
+#     .replace(["-1"], []) \
+#     .select(col("request_processing_time").cast(FloatType()),
+#             col("backend_processing_time").cast(FloatType()),
+#             col("response_processing_time").cast(FloatType())
+#             ) \
+#     .describe() \
+#     .show()
+
+
+# raw_data_w_cols \
+#     .withColumn(col("temp"),when(col("request_processing_time") == "-1", None).otherwise("right_entry"))\
+#     .describe()\
+#     .show()
+
 raw_data_w_cols \
-    .replace(["-1"], []) \
-    .select(col("request_processing_time").cast(FloatType()),
-            col("backend_processing_time").cast(FloatType()),
-            col("response_processing_time").cast(FloatType())
-            ) \
+    .withColumn("request_processing_time",
+                when(col("request_processing_time") == "-1", None).otherwise(col("request_processing_time"))) \
     .describe() \
     .show()
 
@@ -96,7 +108,7 @@ _timestamp = raw_data_w_cols \
               "avg_response_processing_time"]) \
     .pivot("request_type").sum("dummy_count") \
     .na.fill(0.0)
-#
+
 # _timestamp.show(15)
 # _timestamp.describe().show()
 # _timestamp.select(col("request_type_clean")).distinct().show()
