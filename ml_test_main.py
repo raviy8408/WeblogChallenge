@@ -1,3 +1,13 @@
+"""
+Author:
+Date:
+TOpic:
+"""
+
+###########################################################################################3
+# COFIGURATION
+###########################################################################################3
+
 from pyspark.sql import SparkSession
 from pyspark.mllib.regression import *
 from pyspark.sql.functions import *
@@ -7,6 +17,7 @@ import sys
 from pyspark.ml.feature import VectorAssembler
 from pyspark.ml.regression import LinearRegression
 from pyspark.ml.regression import GBTRegressor
+from math import sqrt
 
 spark = SparkSession.builder \
     .master("local[*]") \
@@ -21,15 +32,24 @@ sc.setCheckpointDir('C://Users/Ravi/PycharmProjects/WeblogChallenge/checkpoint/'
 # print(sc)
 
 REPARTITION_FACTOR = int(sc._jsc.sc().getExecutorMemoryStatus().size()) * 10
-print(REPARTITION_FACTOR)
+# print(REPARTITION_FACTOR)
 
 # UTILS FUNCTIONS
 _minutesLambda = lambda i: i * 60
 
+###########################################################################################3
+
+
+###########################################################################################3
+# DATA INGESTION
+###########################################################################################3
+
 raw_data = spark.read.option("delimiter", " ").csv("C://Users/Ravi/PycharmProjects/WeblogChallenge/data")
-# .sample(False, 0.0001, 42)
+# .sample(False, 0.00001, 42)
 
 # print(raw_data.count())
+
+print("Ingesting Data...\n ")
 
 raw_data_w_cols = raw_data \
     .withColumnRenamed("_c0", "timestamp") \
@@ -67,7 +87,16 @@ raw_data_w_cols_clean = raw_data_w_cols \
 
 # print(raw_data_w_cols_clean.select(col("user_agent")).distinct().show())
 
+###########################################################################################
+# SECTION 2 : Additional questions for Machine Learning Engineer (MLE) candidates:
+# Q1: Predict the expected load (requests/second) in the next minute
+###########################################################################################
 
+
+#############################################################################
+# -- MODEL INPUT DATA PREP
+#############################################################################
+print("Pre-processing Data...")
 _pre_proc = raw_data_w_cols_clean \
     .withColumn("IP", split(col("client"), ":").getItem(0)) \
     .withColumn("request_split", split(col("request"), " ")) \
@@ -85,9 +114,10 @@ _pre_proc = raw_data_w_cols_clean \
 # _pre_proc.select(min(col("unix_tmpstmp")),max(col("unix_tmpstmp"))).show()
 # _pre_proc.select(col("hour"), col("minute")).distinct().orderBy("hour").show(110)
 
-
-##############################################################################
-
+#############################################################################
+# -- FEATURE SET 1
+#############################################################################
+print("Creating feature set 1...")
 _model_input_1 = _pre_proc \
     .withColumn("row_count", count(col("date")).over(
     Window.partitionBy(["date", "hour", "minute"]).orderBy("date").rangeBetween(-sys.maxsize, sys.maxsize)).cast(
@@ -105,7 +135,7 @@ _model_input_1 = _pre_proc \
     .na.fill(0.0) \
     .withColumn("time", to_timestamp(concat(col("date"), lit(" "), col("hour"), lit(":"), col("minute")),
                                      format="yyyy-MM-dd HH:mm")) \
-    .withColumnRenamed("row_count", "load")
+    .withColumn("load", col("row_count") / lit(60.0))
 
 _initial_column_set_1 = set(_model_input_1.columns) - set(
     ["load", "date", "hour", "minute"])  # these are the redundant columns
@@ -113,7 +143,8 @@ _initial_column_set_1 = set(_model_input_1.columns) - set(
 # print("_model_input_1 SCHEMA")
 # _model_input_1.printSchema()
 
-####################################
+_model_input_1.select(mean(col("load"))).show()
+####################################################################################
 
 for col_name in list(set(_model_input_1.columns) - set(["date", "hour", "minute", "time"])):
     # time_lag_in_mins = 15
@@ -123,9 +154,9 @@ for col_name in list(set(_model_input_1.columns) - set(["date", "hour", "minute"
             .withColumn(col_name + "_cum_" + str(time_lag_in_mins) + "_minutes",
                         sum(col_name)
                         .over(Window.partitionBy("date")
-                                                         .orderBy(col("time").cast("timestamp").cast("long"))
-                                                         .rangeBetween(- _minutesLambda(time_lag_in_mins), -1)
-                                                         )
+                              .orderBy(col("time").cast("timestamp").cast("long"))
+                              .rangeBetween(- _minutesLambda(time_lag_in_mins), -1)
+                              )
                         ) \
             .na.fill(0.0)
 
@@ -134,6 +165,7 @@ for col_name in list(set(_model_input_1.columns) - set(["date", "hour", "minute"
 # print("_model_input_1 SCHEMA")
 # _model_input_1.printSchema()
 # _model_input_1.show(10)
+##########################################################################
 
 _final_column_set_1 = set(_model_input_1.columns) - _initial_column_set_1
 
@@ -143,10 +175,7 @@ _model_input_1_feature_set_to_assembler = _model_input_1 \
 
 feature_columns_1 = list(set(_model_input_1_feature_set_to_assembler.columns) - set(["date", "hour", "minute", "load"]))
 
-###############################################################################
-
 ##############################################################################
-# VECTOR ASSEMBLER 1
 
 assembler_1 = VectorAssembler(inputCols=feature_columns_1,
                               outputCol="feature_1")
@@ -156,36 +185,10 @@ _model_input_1_feature_set = assembler_1.transform(_model_input_1_feature_set_to
 
 # _model_input_1_feature_set.show(5)
 
-# print("_model_input_1_feature_set SCHEMA")
-# _model_input_1_feature_set.printSchema()
-# _model_input_1_feature_set.select(col("feature_1")).show(10)
-
-
-## TODO: Needs to be deleted
-# lr = LinearRegression()\
-#     .setLabelCol("load")\
-#     .setFeaturesCol("feature_1")\
-#     .setMaxIter(10)\
-#     .setRegParam(1.0)\
-#     .setElasticNetParam(1.0)
-#
-# lrModel = lr.fit(_model_input_1_feature_set)
-# lrModel.transform(_model_input_1_feature_set).select("feature_1", "load", "prediction").show()
-
-
-# gbt = GBTRegressor(maxIter=5, maxDepth=2, seed=42)\
-#     .setLabelCol("load")\
-#     .setFeaturesCol("feature_1")
-#
-# gbtModel = gbt.fit(_model_input_1_feature_set)
-# _train_pred = gbtModel.transform(_model_input_1_feature_set).select("feature_1", "load", "prediction")
-# # _train_pred.show()
-#
-# trainMSE = _train_pred.rdd.map(lambda lp: (lp[1] - lp[2]) * (lp[1] - lp[2])).sum() /\
-#     float(_train_pred.count())
-# print('Test Mean Squared Error = ' + str(trainMSE))
-
-##############################################################################
+#############################################################################
+# -- FEATURE SET 2
+#############################################################################
+print("Creating feature set 2...")
 
 _model_input_2 = _pre_proc \
     .groupBy(["date", "hour", "minute"]) \
@@ -199,25 +202,22 @@ _initial_column_set_2 = set(_model_input_2.columns) - set(["date", "hour", "minu
 
 # print("_model_input_2 SCHEMA")
 # _model_input_2.printSchema()
-
 ###############################################################################
 
 for col_name in list(set(_model_input_2.columns) - set(["date", "hour", "minute", "time"])):
 
-    for time_lag_in_mins in [1, 15, 60, 120]:
+    for time_lag_in_mins in [1, 15]:
         _model_input_2 = _model_input_2 \
             .withColumn(col_name + "_cum_" + str(time_lag_in_mins) + "_minutes",
                         sum(col_name)
                         .over(Window.partitionBy("date")
-                                                         .orderBy(col("time").cast("timestamp").cast("long"))
-                                                         .rangeBetween(- _minutesLambda(time_lag_in_mins), -1)
-                                                         )
+                              .orderBy(col("time").cast("timestamp").cast("long"))
+                              .rangeBetween(- _minutesLambda(time_lag_in_mins), -1)
+                              )
                         ) \
             .na.fill(0.0)
 
 ###############################################################################
-
-# _model_input_1.show(10)
 
 _final_column_set_2 = set(_model_input_2.columns) - _initial_column_set_2
 
@@ -236,8 +236,11 @@ _model_input_2_feature_set = assembler_2.transform(_model_input_2_feature_set_to
     .select("date", "hour", "minute", "feature_2")
 
 # _model_input_2_feature_set.show(5)
-##############################################################################
 
+#############################################################################
+# -- FEATURE SET 3
+#############################################################################
+print("Creating feature set 3...")
 _model_input_3 = _pre_proc \
     .groupBy(["date", "hour", "minute"]) \
     .pivot("backend_status_code").sum("dummy_count") \
@@ -255,14 +258,14 @@ _initial_column_set_3 = set(_model_input_3.columns) - set(["date", "hour", "minu
 
 for col_name in list(set(_model_input_3.columns) - set(["date", "hour", "minute", "time"])):
 
-    for time_lag_in_mins in [1, 15, 60, 120]:
+    for time_lag_in_mins in [1, 15]:
         _model_input_3 = _model_input_3 \
             .withColumn(col_name + "_cum_" + str(time_lag_in_mins) + "_minutes",
                         sum(col_name)
                         .over(Window.partitionBy("date")
-                                                         .orderBy(col("time").cast("timestamp").cast("long"))
-                                                         .rangeBetween(- _minutesLambda(time_lag_in_mins), -1)
-                                                         )
+                              .orderBy(col("time").cast("timestamp").cast("long"))
+                              .rangeBetween(- _minutesLambda(time_lag_in_mins), -1)
+                              )
                         ) \
             .na.fill(0.0)
 
@@ -270,7 +273,6 @@ for col_name in list(set(_model_input_3.columns) - set(["date", "hour", "minute"
 # _model_input_3.printSchema()
 
 #############################################################################
-# _model_input_1.show(10)
 
 _final_column_set_3 = set(_model_input_3.columns) - _initial_column_set_3
 
@@ -291,8 +293,9 @@ _model_input_3_feature_set = assembler_3.transform(_model_input_3_feature_set_to
 # _model_input_3_feature_set.show(5)
 
 #############################################################################
-
-
+# -- FEATURE SET 4
+#############################################################################
+print("Creating feature set 4...")
 _model_input_4 = _pre_proc \
     .select(col("date"), col("hour"), col("minute"), col("received_bytes"), col("sent_bytes")) \
     .groupBy(["date", "hour", "minute"]) \
@@ -304,29 +307,26 @@ _model_input_4 = _pre_proc \
 
 _initial_column_set_4 = set(_model_input_4.columns) - set(["date", "hour", "minute"])
 
-# print("_model_input_3 SCHEMA")
-# _model_input_3.printSchema()
-
-#################################3
+# print("_model_input_4 SCHEMA")
+# _model_input_4.printSchema()
+#################################################################################
 
 for col_name in list(set(_model_input_4.columns) - set(["date", "hour", "minute", "time"])):
 
-    for time_lag_in_mins in [1, 15, 60, 120]:
+    for time_lag_in_mins in [1, 15]:
         _model_input_4 = _model_input_4 \
             .withColumn(col_name + "_cum_" + str(time_lag_in_mins) + "_minutes",
                         sum(col_name)
                         .over(Window.partitionBy("date")
-                                                         .orderBy(col("time").cast("timestamp").cast("long"))
-                                                         .rangeBetween(- _minutesLambda(time_lag_in_mins), -1)
-                                                         )
+                              .orderBy(col("time").cast("timestamp").cast("long"))
+                              .rangeBetween(- _minutesLambda(time_lag_in_mins), -1)
+                              )
                         ) \
             .na.fill(0.0)
 
-# print("_model_input_3 SCHEMA")
-# _model_input_3.printSchema()
-
+# print("_model_input_4 SCHEMA")
+# _model_input_4.printSchema()
 #############################################################################
-# _model_input_1.show(10)
 
 _final_column_set_4 = set(_model_input_4.columns) - _initial_column_set_4
 
@@ -346,9 +346,10 @@ _model_input_4_feature_set = assembler_4.transform(_model_input_4_feature_set_to
 
 # _model_input_4_feature_set.show(5)
 
-
 ##################################################################################
-
+# -- FINAL MODEL INPUT DATA COMBINING FEATURE SET 1,2,3,4
+##################################################################################
+print("Combining feature sets...\n")
 _complete_model_input = _model_input_1_feature_set \
     .join(_model_input_2_feature_set, ["date", "hour", "minute"]) \
     .join(_model_input_3_feature_set, ["date", "hour", "minute"]) \
@@ -365,14 +366,19 @@ assembler = VectorAssembler(inputCols=_complete_feature_list,
 _model_input_all_feature = assembler.transform(_complete_model_input) \
     .select("date", "hour", "minute", "load", "feature")
 
-print("_model_input_all_feature SCHEMA")
+# print("_model_input_all_feature SCHEMA")
 # _model_input_all_feature.printSchema()
+# _model_input_all_feature.show(2)
 
-_model_input_all_feature.show(2)
+########################################################################################
+# --MODEL BUILDING
+########################################################################################
+print("Model Training...\n")
+splits = _model_input_all_feature.randomSplit([0.7, 0.3])
+trainingData = splits[0]
+testData = splits[1]
 
-# gbt = GBTRegressor(maxIter=10, maxDepth=4, seed=42, maxMemoryInMB=1024)\
-#     .setLabelCol("load")\
-#     .setFeaturesCol("feature")
+# trainingData.show(3)
 #
 # lr = LinearRegression()\
 #     .setLabelCol("load")\
@@ -381,17 +387,27 @@ _model_input_all_feature.show(2)
 #     .setRegParam(1.0)\
 #     .setElasticNetParam(1.0)
 #
-# lrModel = lr.fit(_model_input_all_feature)
-# _train_pred = lrModel.transform(_model_input_all_feature).select("feature", "load", "prediction")
+# lrModel = lr.fit(trainingData)
+# _test_pred = lrModel.transform(testData).select("feature", "load", "prediction")
 
-# gbtModel = gbt.fit(_model_input_all_feature)
-# _train_pred = gbtModel.transform(_model_input_all_feature).select("feature", "load", "prediction")
+
+gbt = GBTRegressor(maxIter=5, maxDepth=3, seed=42, maxMemoryInMB=2048) \
+    .setLabelCol("load") \
+    .setFeaturesCol("feature")
+
+gbtModel = gbt.fit(trainingData)
+_test_pred = gbtModel.transform(testData).select("feature", "load", "prediction")
 
 # print("_train_pred SCHEMA")
-# _train_pred.printSchema()
-# _train_pred.catch()
-# _train_pred.show(10)
+# _test_pred.printSchema()
+# _test_pred.catch()
+# _test_pred.show(10)
 
-# trainMSE = _train_pred.rdd.map(lambda lp: (lp[1] - lp[2]) * (lp[1] - lp[2])).sum() /\
-#            float(_train_pred.count())
-# print('Test Mean Squared Error = ' + str(trainMSE))
+testMSE = _test_pred.rdd.map(lambda lp: (lp[1] - lp[2]) * (lp[1] - lp[2])).sum() / \
+          float(_test_pred.count())
+
+print("\n####################################################################\n")
+print('Test Root Mean Squared Error = ' + str(sqrt(testMSE)))
+print("\n####################################################################\n")
+
+###########################################################################
