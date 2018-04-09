@@ -44,8 +44,8 @@ _minutesLambda = lambda i: i * 60
 # DATA INGESTION
 ###########################################################################################3
 
-raw_data = spark.read.option("delimiter", " ").csv("C://Users/Ravi/PycharmProjects/WeblogChallenge/data")
-# .sample(False, 0.00001, 42)
+raw_data = spark.read.option("delimiter", " ").csv("C://Users/Ravi/PycharmProjects/WeblogChallenge/data") \
+    .sample(False, 0.00001, 42)
 
 # print(raw_data.count())
 
@@ -135,7 +135,8 @@ _model_input_1 = _pre_proc \
     .na.fill(0.0) \
     .withColumn("time", to_timestamp(concat(col("date"), lit(" "), col("hour"), lit(":"), col("minute")),
                                      format="yyyy-MM-dd HH:mm")) \
-    .withColumn("load", col("row_count") / lit(60.0))
+    .withColumn("load", col("row_count") / lit(60.0)) \
+    .drop("row_count")
 
 _initial_column_set_1 = set(_model_input_1.columns) - set(
     ["load", "date", "hour", "minute"])  # these are the redundant columns
@@ -391,7 +392,7 @@ testData = splits[1]
 # _test_pred = lrModel.transform(testData).select("feature", "load", "prediction")
 
 
-gbt = GBTRegressor(maxIter=5, maxDepth=3, seed=42, maxMemoryInMB=2048) \
+gbt = GBTRegressor(maxIter=1, maxDepth=2, seed=42, maxMemoryInMB=2048) \
     .setLabelCol("load") \
     .setFeaturesCol("feature")
 

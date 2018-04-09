@@ -15,16 +15,23 @@ from pyspark.sql.types import *
 from pyspark.sql.window import Window
 import sys
 from pyspark.ml.feature import VectorAssembler
+from pyspark.ml.feature import VectorIndexer
+from pyspark.ml.feature import StringIndexer
+from pyspark.ml.feature import OneHotEncoder
 from pyspark.ml.regression import LinearRegression
 from pyspark.ml.regression import GBTRegressor
 from math import sqrt
 
+# from pyspark.sql import HiveContext
+
 spark = SparkSession.builder \
     .master("local[*]") \
     .appName("test") \
+    .enableHiveSupport() \
     .getOrCreate()
 
 sc = spark.sparkContext
+# sqlContext = HiveContext(sc)
 
 sc.setLogLevel("ERROR")
 sc.setCheckpointDir('C://Users/Ravi/PycharmProjects/WeblogChallenge/checkpoint/')
@@ -118,14 +125,368 @@ _pre_proc = raw_data_w_cols_clean \
 # print("_pre_proc schema:")
 # _pre_proc.printSchema()
 
-# creating feature set 1
+#############################################################################
+# -- FEATURE SET 1
+#############################################################################
+print("Creating feature set 1...")
 
-model_input_1 = _pre_proc \
-    .withColumn("IP_URL_visit", count("URL").over(
+_model_input_1 = _pre_proc \
+    .withColumn("IP_URL_visit", size(collect_set("URL").over(
     Window.partitionBy("IP").orderBy("unix_tmpstmp").rangeBetween(Window.unboundedPreceding,
-                                                                  Window.unboundedFollowing)))
-# .groupby("sessionized","IP_URL_visit")\
-# .agg(min(col("unix_tmpstmp")).alias("session_start_hour"))
+                                                                  Window.unboundedFollowing)))) \
+    .groupBy(["sessionized", "IP_URL_visit"]) \
+    .agg(max(col("unix_tmpstmp")).alias("session_end_time"),
+         min(col("unix_tmpstmp")).alias("session_start_time"),
+         hour(min(col("unix_tmpstmp"))).alias("session_start_hour")) \
+    .withColumn("session_time", (unix_timestamp("session_end_time") - unix_timestamp("session_start_time")) / 60.0) \
+    .select("sessionized", "session_start_hour", "session_time", "IP_URL_visit")
+
+# print("_model_input_1 SCHEMA:")
+# _model_input_1.printSchema()
+
+# _model_input_1.select(mean(col("session_time"))).show(2)
+# print(_model_input_1.select(col("session_start_hour")).distinct().count())
+
+########################################################################
+
+stringIndexer = StringIndexer(inputCol="session_start_hour", outputCol="session_start_hour_indexed")
+indexer = stringIndexer.fit(_model_input_1)
+_model_input_1_st_indexed = indexer.transform(_model_input_1)
+encoder = OneHotEncoder(inputCol="session_start_hour_indexed", outputCol="session_start_hour_encoded")
+_model_input_1_encoded = encoder.transform(_model_input_1_st_indexed) \
+    .drop("session_start_hour") \
+    .drop("session_start_hour_indexed") \
+ \
+# _model_input_1_encoded.show(2)
+
+_feature_column_set_1 = ["session_start_hour_encoded", "IP_URL_visit"]
+#########################################################################
+
+assembler_1 = VectorAssembler(inputCols=_feature_column_set_1,
+                              outputCol="feature_1")
+
+_model_input_1_feature_set = assembler_1.transform(_model_input_1_encoded) \
+    .select("sessionized", "session_time", "feature_1")
+
+# _model_input_1_feature_set.show(5)
+########################################################################
+
+#############################################################################
+# -- FEATURE SET 3
+#############################################################################
+print("Creating feature set 2...")
+
+_model_input_2_temp_1 = _pre_proc \
+    .withColumn("row_count", count(col("date")).over(
+    Window.partitionBy(["date", "hour", "minute"]).orderBy("date").rangeBetween(-sys.maxsize, sys.maxsize)).cast(
+    FloatType())) \
+    .withColumn("avg_request_processing_time", mean(col("request_processing_time_clean").cast(FloatType())).over(
+    Window.partitionBy(["date", "hour", "minute"]).orderBy("date").rangeBetween(-sys.maxsize, sys.maxsize))) \
+    .withColumn("avg_backend_processing_time", mean(col("backend_processing_time_clean").cast(FloatType())).over(
+    Window.partitionBy(["date", "hour", "minute"]).orderBy("date").rangeBetween(-sys.maxsize, sys.maxsize))) \
+    .withColumn("avg_response_processing_time", mean(col("response_processing_time_clean").cast(FloatType())).over(
+    Window.partitionBy(["date", "hour", "minute"]).orderBy("date").rangeBetween(-sys.maxsize, sys.maxsize))) \
+    .groupBy(["date", "hour", "minute", "row_count", "avg_request_processing_time", "avg_backend_processing_time",
+              "avg_response_processing_time"]) \
+    .pivot("request_type").sum("dummy_count") \
+    .repartition(REPARTITION_FACTOR) \
+    .na.fill(0.0) \
+    .withColumn("time", to_timestamp(concat(col("date"), lit(" "), col("hour"), lit(":"), col("minute")),
+                                     format="yyyy-MM-dd HH:mm")) \
+    .withColumn("load", col("row_count") / lit(60.0)) \
+    .drop("row_count")
+
+_initial_column_set_2_temp_1 = set(_model_input_2_temp_1.columns) - set(
+    ["date", "hour", "minute"])  # these are the redundant columns
+
+# print("_model_input_2_temp_1 SCHEMA")
+# _model_input_2_temp_1.printSchema()
+
+# _model_input_2.select(mean(col("load"))).show()
+####################################################################################
+
+for col_name in list(set(_model_input_2_temp_1.columns) - set(["date", "hour", "minute", "time"])):
+    # time_lag_in_mins = 15
+    # while time_lag_in_mins <= 60:
+    for time_lag_in_mins in [1, 15, 60]:
+        _model_input_2_temp_1 = _model_input_2_temp_1 \
+            .withColumn(col_name + "_cum_" + str(time_lag_in_mins) + "_minutes",
+                        sum(col_name)
+                        .over(Window.partitionBy("date")
+                              .orderBy(col("time").cast("timestamp").cast("long"))
+                              .rangeBetween(- _minutesLambda(time_lag_in_mins), -1)
+                              )
+                        ) \
+            .na.fill(0.0)
+
+        # time_lag_in_mins += 15
+
+# print("_model_input_2_temp_1 SCHEMA")
+# _model_input_2_temp_1.printSchema()
+# _model_input_1.show(10)
+##########################################################################
+
+_final_column_set_2_temp_1 = set(_model_input_2_temp_1.columns) - _initial_column_set_2_temp_1
+
+_model_input_2_temp_1_feature_set_to_assembler = _model_input_2_temp_1 \
+    .select(list(_final_column_set_2_temp_1)) \
+    .drop("time")
+
+feature_columns_2_temp_1 = list(
+    set(_model_input_2_temp_1_feature_set_to_assembler.columns) - set(["date", "hour", "minute"]))
+
+# print(feature_columns_2_temp_1)
+
+###########################################################################
+
+assembler_2_temp_1 = VectorAssembler(inputCols=feature_columns_2_temp_1,
+                                     outputCol="feature_2")
+
+_model_input_2_temp_1_feature_set = assembler_2_temp_1.transform(_model_input_2_temp_1_feature_set_to_assembler) \
+    .withColumn("date_hour_min", concat_ws("_", concat_ws("_", col("date"), col("hour")), col("minute"))) \
+    .select("date_hour_min", "feature_2") \
+ \
+# _model_input_2_temp_1_feature_set.printSchema()
+
+#########################################################################
+
+_session_start_date_hour_min = _pre_proc \
+    .groupBy("sessionized") \
+    .agg(min("unix_tmpstmp").alias("session_start_time")) \
+    .withColumn("date", to_date(col("session_start_time"))) \
+    .withColumn("hour", hour(col("session_start_time"))) \
+    .withColumn("minute", minute(col("session_start_time"))) \
+    .withColumn("date_hour_min", concat_ws("_", concat_ws("_", col("date"), col("hour")), col("minute"))) \
+    .select("sessionized", "date_hour_min")
+
+# print("_model_input_2_temp_2 SCHEMA:")
+# _model_input_2_temp_2.printSchema()
+
+_model_input_2_feature_set = _session_start_date_hour_min \
+    .join(_model_input_2_temp_1_feature_set, "date_hour_min", how="left") \
+    .drop("date_hour_min")
+
+# print("_model_input_2 SCHEMA:")
+# _model_input_2.printSchema()
+# _model_input_2.show(10)
+
+############################################################################
+
+#############################################################################
+# -- FEATURE SET 3
+#############################################################################
+print("Creating feature set 3...")
+
+_model_input_3_temp_1 = _pre_proc \
+    .groupBy(["date", "hour", "minute"]) \
+    .pivot("elb_status_code").sum("dummy_count") \
+    .repartition(REPARTITION_FACTOR) \
+    .na.fill(0.0) \
+    .withColumn("time", to_timestamp(concat(col("date"), lit(" "), col("hour"), lit(":"), col("minute")),
+                                     format="yyyy-MM-dd HH:mm"))
+
+_initial_column_set_3_temp_1 = set(_model_input_3_temp_1.columns) - set(["date", "hour", "minute"])
+
+# print("_model_input_3_temp_1 SCHEMA")
+# _model_input_3_temp_1.printSchema()
+###############################################################################
+
+for col_name in list(set(_model_input_3_temp_1.columns) - set(["date", "hour", "minute", "time"])):
+
+    for time_lag_in_mins in [1, 15]:
+        _model_input_3_temp_1 = _model_input_3_temp_1 \
+            .withColumn(col_name + "_cum_" + str(time_lag_in_mins) + "_minutes",
+                        sum(col_name)
+                        .over(Window.partitionBy("date")
+                              .orderBy(col("time").cast("timestamp").cast("long"))
+                              .rangeBetween(- _minutesLambda(time_lag_in_mins), -1)
+                              )
+                        ) \
+            .na.fill(0.0)
+
+###############################################################################
+
+_final_column_set_3_temp_1 = set(_model_input_3_temp_1.columns) - _initial_column_set_3_temp_1
+
+_model_input_3_temp_1_feature_set_to_assembler = _model_input_3_temp_1 \
+    .drop("time") \
+    .select(list(_final_column_set_3_temp_1))
+
+feature_columns_3_temp_1 = list(
+    set(_model_input_3_temp_1_feature_set_to_assembler.columns) - set(["date", "hour", "minute"]))
+
+#############################################################################33
+
+assembler_3_temp_1 = VectorAssembler(inputCols=feature_columns_3_temp_1,
+                                     outputCol="feature_3")
+
+_model_input_3_temp_1_feature_set = assembler_3_temp_1.transform(_model_input_3_temp_1_feature_set_to_assembler) \
+    .withColumn("date_hour_min", concat_ws("_", concat_ws("_", col("date"), col("hour")), col("minute"))) \
+    .select("date_hour_min", "feature_3")
+
+################################################################################
+
+_model_input_3_feature_set = _session_start_date_hour_min \
+    .join(_model_input_3_temp_1_feature_set, "date_hour_min", how="left") \
+    .drop("date_hour_min")
+
+################################################################################
+
+#############################################################################
+# -- FEATURE SET 4
+#############################################################################
 
 
-model_input_1.select(col("IP_URL_visit")).distinct().orderBy(["IP_URL_visit"], ascending=[0, 1]).show(5)
+print("Creating feature set 4...")
+_model_input_4_temp_1 = _pre_proc \
+    .groupBy(["date", "hour", "minute"]) \
+    .pivot("backend_status_code").sum("dummy_count") \
+    .repartition(REPARTITION_FACTOR) \
+    .na.fill(0.0) \
+    .withColumn("time", to_timestamp(concat(col("date"), lit(" "), col("hour"), lit(":"), col("minute")),
+                                     format="yyyy-MM-dd HH:mm"))
+
+_initial_column_set_4_temp_1 = set(_model_input_4_temp_1.columns) - set(["date", "hour", "minute"])
+
+# print("_model_input_4_temp_1 SCHEMA")
+# _model_input_4_temp_1.printSchema()
+
+#################################4_temp_1
+
+for col_name in list(set(_model_input_4_temp_1.columns) - set(["date", "hour", "minute", "time"])):
+
+    for time_lag_in_mins in [1, 15]:
+        _model_input_4_temp_1 = _model_input_4_temp_1 \
+            .withColumn(col_name + "_cum_" + str(time_lag_in_mins) + "_minutes",
+                        sum(col_name)
+                        .over(Window.partitionBy("date")
+                              .orderBy(col("time").cast("timestamp").cast("long"))
+                              .rangeBetween(- _minutesLambda(time_lag_in_mins), -1)
+                              )
+                        ) \
+            .na.fill(0.0)
+
+# print("_model_input_4_temp_1 SCHEMA")
+# _model_input_4_temp_1.printSchema()
+
+#############################################################################
+
+_final_column_set_4_temp_1 = set(_model_input_4_temp_1.columns) - _initial_column_set_4_temp_1
+
+_model_input_4_temp_1_feature_set_to_assembler = _model_input_4_temp_1 \
+    .drop("time") \
+    .select(list(_final_column_set_4_temp_1))
+
+feature_columns_4_temp_1 = list(
+    set(_model_input_4_temp_1_feature_set_to_assembler.columns) - set(["date", "hour", "minute"]))
+
+#############################################################################
+
+assembler_4_temp_1 = VectorAssembler(inputCols=feature_columns_4_temp_1,
+                                     outputCol="feature_4")
+
+_model_input_4_temp_1_feature_set = assembler_4_temp_1.transform(_model_input_4_temp_1_feature_set_to_assembler) \
+    .withColumn("date_hour_min", concat_ws("_", concat_ws("_", col("date"), col("hour")), col("minute"))) \
+    .select("date_hour_min", "feature_4")
+
+# _model_input_4_temp_1_feature_set.show(5)
+
+################################################################################################
+
+################################################################################
+
+_model_input_4_feature_set = _session_start_date_hour_min \
+    .join(_model_input_4_temp_1_feature_set, "date_hour_min", how="left") \
+    .drop("date_hour_min")
+
+################################################################################
+
+
+#############################################################################
+# -- FEATURE SET 5
+#############################################################################
+print("Creating feature set 5...")
+_model_input_5_temp_1 = _pre_proc \
+    .select(col("date"), col("hour"), col("minute"), col("received_bytes"), col("sent_bytes")) \
+    .groupBy(["date", "hour", "minute"]) \
+    .agg(mean(col("received_bytes").cast(FloatType())).alias("avg_received_bytes"),
+         mean(col("sent_bytes").cast(FloatType())).alias("avg_sent_bytes")) \
+    .repartition(REPARTITION_FACTOR) \
+    .withColumn("time", to_timestamp(concat(col("date"), lit(" "), col("hour"), lit(":"), col("minute")),
+                                     format="yyyy-MM-dd HH:mm"))
+
+_initial_column_set_5_temp_1 = set(_model_input_5_temp_1.columns) - set(["date", "hour", "minute"])
+
+# print("_model_input_5_temp_1 SCHEMA")
+# _model_input_5_temp_1.printSchema()
+#################################################################################
+
+for col_name in list(set(_model_input_5_temp_1.columns) - set(["date", "hour", "minute", "time"])):
+
+    for time_lag_in_mins in [1, 15]:
+        _model_input_5_temp_1 = _model_input_5_temp_1 \
+            .withColumn(col_name + "_cum_" + str(time_lag_in_mins) + "_minutes",
+                        sum(col_name)
+                        .over(Window.partitionBy("date")
+                              .orderBy(col("time").cast("timestamp").cast("long"))
+                              .rangeBetween(- _minutesLambda(time_lag_in_mins), -1)
+                              )
+                        ) \
+            .na.fill(0.0)
+
+# print("_model_input_5_temp_1 SCHEMA")
+# _model_input_5_temp_1.printSchema()
+#############################################################################
+
+_final_column_set_5_temp_1 = set(_model_input_5_temp_1.columns) - _initial_column_set_5_temp_1
+
+_model_input_5_temp_1_feature_set_to_assembler = _model_input_5_temp_1 \
+    .drop("time") \
+    .select(list(_final_column_set_5_temp_1))
+
+feature_columns_5_temp_1 = list(
+    set(_model_input_5_temp_1_feature_set_to_assembler.columns) - set(["date", "hour", "minute"]))
+
+#############################################################################33
+
+assembler_5_temp_1 = VectorAssembler(inputCols=feature_columns_5_temp_1,
+                                     outputCol="feature_5")
+
+_model_input_5_temp_1_feature_set = assembler_5_temp_1.transform(_model_input_5_temp_1_feature_set_to_assembler) \
+    .withColumn("date_hour_min", concat_ws("_", concat_ws("_", col("date"), col("hour")), col("minute"))) \
+    .select("date_hour_min", "feature_5")
+
+# _model_input_5_temp_1_feature_set.show(5)
+
+################################################################################
+
+_model_input_5_feature_set = _session_start_date_hour_min \
+    .join(_model_input_5_temp_1_feature_set, "date_hour_min", how="left") \
+    .drop("date_hour_min")
+
+################################################################################
+
+##################################################################################
+# -- FINAL MODEL INPUT DATA COMBINING FEATURE SET 1,2,3,4
+##################################################################################
+print("Combining feature sets...\n")
+_complete_model_input = _model_input_1_feature_set \
+    .join(_model_input_2_feature_set, ["sessionized"]) \
+    .join(_model_input_3_feature_set, ["sessionized"]) \
+    .join(_model_input_4_feature_set, ["sessionized"]) \
+    .join(_model_input_5_feature_set, ["sessionized"]) \
+    .repartition(REPARTITION_FACTOR)
+
+# _complete_model_input.show(5)
+
+_complete_feature_list = list(set(_complete_model_input.columns) - set(["sessionized", "session_time"]))
+
+assembler = VectorAssembler(inputCols=_complete_feature_list,
+                            outputCol="feature")
+
+_model_input_all_feature = assembler.transform(_complete_model_input) \
+    .select("sessionized", "session_time", "feature")
+
+print("_model_input_all_feature SCHEMA")
+_model_input_all_feature.printSchema()
+# _model_input_all_feature.show(2)
