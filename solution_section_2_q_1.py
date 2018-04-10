@@ -18,7 +18,8 @@ from pyspark.sql.functions import *
 from pyspark.sql.types import *
 from pyspark.sql.window import Window
 import sys
-from pyspark.ml.feature import VectorAssembler
+from pyspark.ml.feature import VectorAssembler, StandardScaler
+from pyspark.ml.feature import Normalizer
 from pyspark.ml.regression import LinearRegression
 from pyspark.ml.regression import GBTRegressor
 from math import sqrt
@@ -47,8 +48,8 @@ _minutesLambda = lambda i: i * 60
 # DATA INGESTION
 ###########################################################################################3
 
-raw_data = spark.read.option("delimiter", " ").csv("C://Users/Ravi/PycharmProjects/WeblogChallenge/data") \
-    .sample(False, 0.00001, 42)
+raw_data = spark.read.option("delimiter", " ").csv("C://Users/Ravi/PycharmProjects/WeblogChallenge/data")
+# .sample(False, 0.00001, 42)
 
 # print(raw_data.count())
 
@@ -369,10 +370,21 @@ _model_input_all_feature = assembler.transform(_complete_model_input) \
 # _model_input_all_feature.show(2)
 
 ########################################################################################
+
+scaler = StandardScaler(inputCol="feature", outputCol="scaledFeatures",
+                        withStd=True, withMean=True)
+
+scalerModel = scaler.fit(_model_input_all_feature)
+
+_model_input_all_feature_scaled = scalerModel.transform(_model_input_all_feature)
+
+# _model_input_all_feature_normalized.show()
+
+########################################################################################
 # --MODEL BUILDING
 ########################################################################################
 print("Model Training...\n")
-splits = _model_input_all_feature.randomSplit([0.7, 0.3])
+splits = _model_input_all_feature_scaled.randomSplit([0.7, 0.3])
 trainingData = splits[0]
 testData = splits[1]
 
@@ -388,13 +400,12 @@ testData = splits[1]
 # lrModel = lr.fit(trainingData)
 # _test_pred = lrModel.transform(testData).select("feature", "load", "prediction")
 
-
-gbt = GBTRegressor(maxIter=1, maxDepth=2, seed=42, maxMemoryInMB=2048) \
+gbt = GBTRegressor(maxIter=3, maxDepth=3, seed=42, maxMemoryInMB=2048) \
     .setLabelCol("load") \
-    .setFeaturesCol("feature")
+    .setFeaturesCol("scaledFeatures")
 
 gbtModel = gbt.fit(trainingData)
-_test_pred = gbtModel.transform(testData).select("feature", "load", "prediction")
+_test_pred = gbtModel.transform(testData).select("scaledFeatures", "load", "prediction")
 
 # print("_train_pred SCHEMA")
 # _test_pred.printSchema()

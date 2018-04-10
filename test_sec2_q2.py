@@ -14,7 +14,7 @@ from pyspark.sql.functions import *
 from pyspark.sql.types import *
 from pyspark.sql.window import Window
 import sys
-from pyspark.ml.feature import VectorAssembler
+from pyspark.ml.feature import VectorAssembler, StandardScaler
 from pyspark.ml.feature import VectorIndexer
 from pyspark.ml.feature import StringIndexer
 from pyspark.ml.feature import OneHotEncoder
@@ -52,7 +52,7 @@ _minutesLambda = lambda i: i * 60
 ###########################################################################################3
 
 raw_data = spark.read.option("delimiter", " ").csv("C://Users/Ravi/PycharmProjects/WeblogChallenge/data")
-# .sample(False, 0.001, 42)
+# .sample(False, 0.0001, 42)
 
 # print(raw_data.count())
 
@@ -159,14 +159,14 @@ _model_input_1_encoded = encoder.transform(_model_input_1_st_indexed) \
  \
 # _model_input_1_encoded.show(2)
 
-_feature_column_set_1 = ["session_start_hour_encoded", "IP_URL_visit"]
+_feature_column_set_1 = ["IP_URL_visit"]
 #########################################################################
 
 assembler_1 = VectorAssembler(inputCols=_feature_column_set_1,
                               outputCol="feature_1")
 
 _model_input_1_feature_set = assembler_1.transform(_model_input_1_encoded) \
-    .select("sessionized", "session_time", "feature_1")
+    .select("sessionized", "session_time", "session_start_hour_encoded", "feature_1")
 
 _model_input_1_feature_set.select(mean(col("session_time"))).show()
 
@@ -479,24 +479,46 @@ _complete_model_input = _model_input_1_feature_set \
 
 # _complete_model_input.show(5)
 
-_complete_feature_list = list(set(_complete_model_input.columns) - set(["sessionized", "session_time"]))
+_complete_feature_list_continuous_var = list(
+    set(_complete_model_input.columns) - set(["sessionized", "session_time", "session_start_hour_encoded"]))
+
+assembler_continuous_var = VectorAssembler(inputCols=_complete_feature_list_continuous_var,
+                                           outputCol="feature_continuous")
+
+_model_input_all_feature = assembler_continuous_var.transform(_complete_model_input) \
+    .select("sessionized", "session_time", "session_start_hour_encoded", "feature_continuous")
+
+# print("_model_input_all_feature SCHEMA")
+# _model_input_all_feature.printSchema()
+# _model_input_all_feature.show(2)
+
+########################################################################################
+scaler = StandardScaler(inputCol="feature_continuous", outputCol="scaledFeatures",
+                        withStd=True, withMean=True)
+
+scalerModel = scaler.fit(_model_input_all_feature)
+
+_model_input_continuous_feature_scaled = scalerModel.transform(_model_input_all_feature)
+
+# _model_input_continuous_feature_scaled.printSchema()
+
+_complete_feature_list = ["scaledFeatures", "session_start_hour_encoded"]
+
+########################################################################################
 
 assembler = VectorAssembler(inputCols=_complete_feature_list,
                             outputCol="feature")
 
-_model_input_all_feature = assembler.transform(_complete_model_input) \
+_model_input_all_feature_vectorized = assembler.transform(_model_input_continuous_feature_scaled) \
     .select("sessionized", "session_time", "feature")
 
-print("_model_input_all_feature SCHEMA")
-_model_input_all_feature.printSchema()
-# _model_input_all_feature.show(2)
-
+# _model_input_all_feature_vectorized.printSchema()
 
 ########################################################################################
 # --MODEL BUILDING
 ########################################################################################
 print("Model Training...\n")
-splits = _model_input_all_feature.randomSplit([0.7, 0.3])
+splits = _model_input_all_feature_vectorized.randomSplit([0.7, 0.3])
 trainingData = splits[0]
 testData = splits[1]
 
@@ -513,7 +535,7 @@ testData = splits[1]
 # _test_pred = lrModel.transform(testData).select("feature", "load", "prediction")
 
 
-gbt = GBTRegressor(maxIter=3, maxDepth=2, seed=42, maxMemoryInMB=2048) \
+gbt = GBTRegressor(maxIter=3, maxDepth=3, seed=42, maxMemoryInMB=2048) \
     .setLabelCol("session_time") \
     .setFeaturesCol("feature")
 
@@ -523,13 +545,13 @@ _test_pred = gbtModel.transform(testData).select("feature", "session_time", "pre
 # print("_train_pred SCHEMA")
 # _test_pred.printSchema()
 # _test_pred.catch()
-# _test_pred.show(10)
+_test_pred.show(30)
 
-testMSE = _test_pred.rdd.map(lambda lp: (lp[1] - lp[2]) * (lp[1] - lp[2])).sum() / \
-          float(_test_pred.count())
-
-print("\n####################################################################\n")
-print('Test Root Mean Squared Error = ' + str(sqrt(testMSE)))
-print("\n####################################################################\n")
+# testMSE = _test_pred.rdd.map(lambda lp: (lp[1] - lp[2]) * (lp[1] - lp[2])).sum() / \
+#           float(_test_pred.count())
+#
+# print("\n####################################################################\n")
+# print('Test Root Mean Squared Error = ' + str(sqrt(testMSE)))
+# print("\n####################################################################\n")
 
 ###########################################################################
