@@ -63,8 +63,13 @@ raw_data_w_cols = raw_data \
 # SECTION 1 : Processing & Analytical goals
 ###########################################################################################
 
-# Q1: Sessionize the web log by IP. Sessionize = aggregrate all page hits by visitor/IP during a fixed time window.
-
+###############################################################################
+# Q1: Sessionize the web log by IP. Sessionize = aggregrate all page hits by
+#       visitor/IP during a fixed time window.
+# Solution: Per IP a session is defined as time gap between two consecutive
+#           requests should be less than 30 min. The column "sessionize"
+#           is the final column indicating the session for all the requests.
+###############################################################################
 _sessionized = raw_data_w_cols \
     .withColumn("IP", split(col("client"), ":").getItem(0)) \
     .withColumn("request_split", split(col("request"), " ")) \
@@ -90,7 +95,11 @@ print("Solution 1:")
 _sessionized.show(10)
 print("##################################################\n")
 
+###############################################################################
 # Q2: Determine the average session time
+# Solution: Calculate session time from session start and end time. Print
+#           variable summary.
+###############################################################################
 
 _session_time = _sessionized \
     .groupBy(["IP", "sessionized"]) \
@@ -98,11 +107,15 @@ _session_time = _sessionized \
          min(col("unix_tmpstmp")).alias("session_start_time")) \
     .withColumn("session_time", (unix_timestamp("session_end_time") - unix_timestamp("session_start_time")) / 60.0)
 
-print("Solution 2:")
+print("Solution 2: Average session time")
 _session_time.describe(['session_time']).show()
 print("##################################################\n")
 
-# Q3: Determine unique URL visits per session. To clarify, count a hit to a unique URL only once per session.
+###############################################################################
+# Q3: Determine unique URL visits per session. To clarify, count a hit to a
+#       unique URL only once per session.
+# Solution: Count distinct URL per session visit
+###############################################################################
 
 _URL_visit_count = _sessionized \
     .groupBy(["sessionized"]) \
@@ -112,12 +125,18 @@ print("Solution 3:")
 _URL_visit_count.show(10)
 print("##################################################\n")
 
+###############################################################################
 # Q4: Find the most engaged users, ie the IPs with the longest session times
+# Solution: Calculate avg session time for all the IPs. Table is displayed in
+#           descending order of avg session time
+###############################################################################
 
 _user_avg_session_time = _session_time.groupBy(["IP"]) \
-    .agg(mean("session_time").alias("avg_time")) \
-    .orderBy(["avg_time"], ascending=[0])
+    .agg(mean("session_time").alias("avg_session_time")) \
+    .orderBy(["avg_session_time"], ascending=[0])
 
 print("Solution 4:")
 _user_avg_session_time.show(10)
 print("##################################################\n")
+
+###############################################################################

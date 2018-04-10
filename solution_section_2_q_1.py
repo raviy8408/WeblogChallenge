@@ -1,12 +1,16 @@
 """
-Author:
-Date:
-TOpic:
+Author: Ravi Kumar Yadav
+Date: 10/04/2018
+TOpic: Section 2 question 1 Solution
 """
+###########################################################################################
+# SECTION 2 : Additional questions for Machine Learning Engineer (MLE) candidates:
+# Q1: Predict the expected load (requests/second) in the next minute
+###########################################################################################
 
-###########################################################################################3
+###########################################################################################
 # COFIGURATION
-###########################################################################################3
+###########################################################################################
 
 from pyspark.sql import SparkSession
 from pyspark.mllib.regression import *
@@ -38,7 +42,6 @@ REPARTITION_FACTOR = int(sc._jsc.sc().getExecutorMemoryStatus().size()) * 10
 _minutesLambda = lambda i: i * 60
 
 ###########################################################################################3
-
 
 ###########################################################################################3
 # DATA INGESTION
@@ -86,12 +89,6 @@ raw_data_w_cols_clean = raw_data_w_cols \
     .withColumnRenamed("backend_status_code_clean", "backend_status_code")
 
 # print(raw_data_w_cols_clean.select(col("user_agent")).distinct().show())
-
-###########################################################################################
-# SECTION 2 : Additional questions for Machine Learning Engineer (MLE) candidates:
-# Q1: Predict the expected load (requests/second) in the next minute
-###########################################################################################
-
 
 #############################################################################
 # -- MODEL INPUT DATA PREP

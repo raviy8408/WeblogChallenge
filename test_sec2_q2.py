@@ -51,8 +51,8 @@ _minutesLambda = lambda i: i * 60
 # DATA INGESTION
 ###########################################################################################3
 
-raw_data = spark.read.option("delimiter", " ").csv("C://Users/Ravi/PycharmProjects/WeblogChallenge/data") \
-    .sample(False, 0.001, 42)
+raw_data = spark.read.option("delimiter", " ").csv("C://Users/Ravi/PycharmProjects/WeblogChallenge/data")
+# .sample(False, 0.001, 42)
 
 # print(raw_data.count())
 
@@ -168,7 +168,8 @@ assembler_1 = VectorAssembler(inputCols=_feature_column_set_1,
 _model_input_1_feature_set = assembler_1.transform(_model_input_1_encoded) \
     .select("sessionized", "session_time", "feature_1")
 
-# _model_input_1_feature_set.show(5)
+_model_input_1_feature_set.select(mean(col("session_time"))).show()
+
 ########################################################################
 
 #############################################################################
@@ -202,13 +203,12 @@ _initial_column_set_2_temp_1 = set(_model_input_2_temp_1.columns) - set(
 # print("_model_input_2_temp_1 SCHEMA")
 # _model_input_2_temp_1.printSchema()
 
-# _model_input_2.select(mean(col("load"))).show()
 ####################################################################################
 
 for col_name in list(set(_model_input_2_temp_1.columns) - set(["date", "hour", "minute", "time"])):
     # time_lag_in_mins = 15
     # while time_lag_in_mins <= 60:
-    for time_lag_in_mins in [1, 15, 60]:
+    for time_lag_in_mins in [15]:
         _model_input_2_temp_1 = _model_input_2_temp_1 \
             .withColumn(col_name + "_cum_" + str(time_lag_in_mins) + "_minutes",
                         sum(col_name)
@@ -293,7 +293,7 @@ _initial_column_set_3_temp_1 = set(_model_input_3_temp_1.columns) - set(["date",
 
 for col_name in list(set(_model_input_3_temp_1.columns) - set(["date", "hour", "minute", "time"])):
 
-    for time_lag_in_mins in [1, 15]:
+    for time_lag_in_mins in [15]:
         _model_input_3_temp_1 = _model_input_3_temp_1 \
             .withColumn(col_name + "_cum_" + str(time_lag_in_mins) + "_minutes",
                         sum(col_name)
@@ -355,7 +355,7 @@ _initial_column_set_4_temp_1 = set(_model_input_4_temp_1.columns) - set(["date",
 
 for col_name in list(set(_model_input_4_temp_1.columns) - set(["date", "hour", "minute", "time"])):
 
-    for time_lag_in_mins in [1, 15]:
+    for time_lag_in_mins in [15]:
         _model_input_4_temp_1 = _model_input_4_temp_1 \
             .withColumn(col_name + "_cum_" + str(time_lag_in_mins) + "_minutes",
                         sum(col_name)
@@ -423,7 +423,7 @@ _initial_column_set_5_temp_1 = set(_model_input_5_temp_1.columns) - set(["date",
 
 for col_name in list(set(_model_input_5_temp_1.columns) - set(["date", "hour", "minute", "time"])):
 
-    for time_lag_in_mins in [1, 15]:
+    for time_lag_in_mins in [15]:
         _model_input_5_temp_1 = _model_input_5_temp_1 \
             .withColumn(col_name + "_cum_" + str(time_lag_in_mins) + "_minutes",
                         sum(col_name)
@@ -467,7 +467,7 @@ _model_input_5_feature_set = _session_start_date_hour_min \
 ################################################################################
 
 ##################################################################################
-# -- FINAL MODEL INPUT DATA COMBINING FEATURE SET 1,2,3,4
+# -- FINAL MODEL INPUT DATA COMBINING FEATURE SET 1,2,3,4,5
 ##################################################################################
 print("Combining feature sets...\n")
 _complete_model_input = _model_input_1_feature_set \
@@ -490,3 +490,46 @@ _model_input_all_feature = assembler.transform(_complete_model_input) \
 print("_model_input_all_feature SCHEMA")
 _model_input_all_feature.printSchema()
 # _model_input_all_feature.show(2)
+
+
+########################################################################################
+# --MODEL BUILDING
+########################################################################################
+print("Model Training...\n")
+splits = _model_input_all_feature.randomSplit([0.7, 0.3])
+trainingData = splits[0]
+testData = splits[1]
+
+# trainingData.show(3)
+#
+# lr = LinearRegression()\
+#     .setLabelCol("load")\
+#     .setFeaturesCol("feature")\
+#     .setMaxIter(10)\
+#     .setRegParam(1.0)\
+#     .setElasticNetParam(1.0)
+#
+# lrModel = lr.fit(trainingData)
+# _test_pred = lrModel.transform(testData).select("feature", "load", "prediction")
+
+
+gbt = GBTRegressor(maxIter=3, maxDepth=2, seed=42, maxMemoryInMB=2048) \
+    .setLabelCol("session_time") \
+    .setFeaturesCol("feature")
+
+gbtModel = gbt.fit(trainingData)
+_test_pred = gbtModel.transform(testData).select("feature", "session_time", "prediction")
+
+# print("_train_pred SCHEMA")
+# _test_pred.printSchema()
+# _test_pred.catch()
+# _test_pred.show(10)
+
+testMSE = _test_pred.rdd.map(lambda lp: (lp[1] - lp[2]) * (lp[1] - lp[2])).sum() / \
+          float(_test_pred.count())
+
+print("\n####################################################################\n")
+print('Test Root Mean Squared Error = ' + str(sqrt(testMSE)))
+print("\n####################################################################\n")
+
+###########################################################################
