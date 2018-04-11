@@ -261,8 +261,8 @@ _model_input_4_feature_set = assembler_4.transform(_model_input_4) \
 ##################################################################################
 print("Combining feature sets...\n")
 _complete_model_input = _model_input_1_feature_set \
-    .join(_model_input_2_feature_set, ["IP"]) \
-    .join(_model_input_4_feature_set, ["IP"])
+    .join(_model_input_2_feature_set, ["IP"])
+
 # .repartition(REPARTITION_FACTOR)
 
 # _complete_model_input.show(5)
@@ -281,15 +281,15 @@ _model_input_all_feature = assembler.transform(_complete_model_input) \
 # _model_input_all_feature.show(2)
 
 ########################################################################################
-# print("Scaling features...")
-# scaler = StandardScaler(inputCol="feature", outputCol="scaledFeatures",
-#                         withStd=True, withMean=True)
-#
-# scalerModel = scaler.fit(_model_input_all_feature)
-#
-# _model_input_all_feature_scaled = scalerModel.transform(_model_input_all_feature)\
-#     .drop("feature")\
-#     .repartition(REPARTITION_FACTOR)
+print("Scaling features...")
+scaler = StandardScaler(inputCol="feature", outputCol="scaledFeatures",
+                        withStd=True, withMean=True)
+
+scalerModel = scaler.fit(_model_input_all_feature)
+
+_model_input_all_feature_scaled = scalerModel.transform(_model_input_all_feature) \
+    .drop("feature") \
+    .repartition(REPARTITION_FACTOR)
 
 # _model_input_all_feature_scaled.show()
 
@@ -299,7 +299,7 @@ _model_input_all_feature = assembler.transform(_complete_model_input) \
 # --MODEL BUILDING
 ########################################################################################
 print("Model Training...\n")
-splits = _model_input_all_feature.randomSplit([0.7, 0.3])
+splits = _model_input_all_feature_scaled.randomSplit([0.7, 0.3])
 trainingData = splits[0]
 testData = splits[1]
 
@@ -317,21 +317,21 @@ testData = splits[1]
 
 gbt = GBTRegressor(maxIter=3, maxDepth=3, seed=42, maxMemoryInMB=2048) \
     .setLabelCol("unique_URL_visit") \
-    .setFeaturesCol("feature")
+    .setFeaturesCol("scaledFeatures")
 
 gbtModel = gbt.fit(trainingData)
-_test_pred = gbtModel.transform(testData).select("feature", "unique_URL_visit", "prediction")
+_test_pred = gbtModel.transform(testData).select("scaledFeatures", "unique_URL_visit", "prediction")
 
 # print("_train_pred SCHEMA")
 # _test_pred.printSchema()
 # _test_pred.catch()
-_test_pred.show(10)
+# _test_pred.show(10)
 
-# testMSE = _test_pred.rdd.map(lambda lp: (lp[1] - lp[2]) * (lp[1] - lp[2])).sum() / \
-#           float(_test_pred.count())
-#
-# print("\n####################################################################\n")
-# print('Test Root Mean Squared Error = ' + str(sqrt(testMSE)))
-# print("\n####################################################################\n")
+testMSE = _test_pred.rdd.map(lambda lp: (lp[1] - lp[2]) * (lp[1] - lp[2])).sum() / \
+          float(_test_pred.count())
+
+print("\n####################################################################\n")
+print('Test Root Mean Squared Error = ' + str(sqrt(testMSE)))
+print("\n####################################################################\n")
 
 ###########################################################################
