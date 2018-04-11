@@ -43,7 +43,9 @@ Variable list:
 2. Predict the session length for a given IP
 
 ### Solution:
-Modeling Approach: [solution_section_2_q_2.py](https://github.com/raviy8408/WeblogChallenge/blob/master/solution_section_2_q_2.py)
+[solution_section_2_q_2.py](https://github.com/raviy8408/WeblogChallenge/blob/master/solution_section_2_q_2.py)
+
+Modeling Approach:
 - Regression based generalized model is build for all the IPs to predict the length of any session.
 Variable list:
 - distinct URL visit count for the IP
@@ -56,6 +58,7 @@ Variable list:
 
 ### Solution:
 [solution_section_2_q_3.py](https://github.com/raviy8408/WeblogChallenge/blob/master/solution_section_2_q_3.py)
+
 Modeling Approach:
 - Regression model is build to predict URL visit count for IPs based of the uses data available. However user
 demographic information would have made more sense for unique URL visit count prediction. As with the current model we
