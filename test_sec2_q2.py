@@ -211,7 +211,7 @@ for col_name in list(set(_model_input_2_temp_1.columns) - set(["date", "hour", "
     for time_lag_in_mins in [15]:
         _model_input_2_temp_1 = _model_input_2_temp_1 \
             .withColumn(col_name + "_cum_" + str(time_lag_in_mins) + "_minutes",
-                        sum(col_name)
+                        mean(col_name)
                         .over(Window.partitionBy("date")
                               .orderBy(col("time").cast("timestamp").cast("long"))
                               .rangeBetween(- _minutesLambda(time_lag_in_mins), -1)

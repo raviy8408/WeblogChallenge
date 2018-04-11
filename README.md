@@ -26,18 +26,56 @@ The challenge is to make make analytical observations about the data using the d
 
 1. Predict the expected load (requests/second) in the next minute
 
-## Solution 1:
-Modeling Approach: As data available was only for last few hours, variable are created using recent history. For
+### Solution:
+Modeling Approach:
+- Problem is solved using regression method. Although the problem could have also been solved using time series modeling,
+however due to unavailability of any scalable time series methods regression is chosen.
+- As data available was only for last few hours, variable are created using recent history. For
 example total load in last 1, 15, 60 and 120 min is created as variable. Similar approach has been taken for all other
 variables as well.
-
-Features are created in multiple steps. At each step features are vectorized and finally all the features are merged
-together to
-
+Variable list:
+- sum of last 1, 15, 60, 120 min request_processing_time, backend_processing_time, response_processing_time and count of request type
+- sum of last 1, 15 min elb_status_code and backend_status_code
+- sum of last 1, 15 min received bytes and sent bytes
 
 2. Predict the session length for a given IP
 
+### Solution:
+Modeling Approach:
+- Regression based generalized model is build for all the IPs to predict the length of any session.
+Variable list:
+- distinct URL visit count for the IP
+- session start hour as a categorical variable
+- last 15 min average of request_processing_time, backend_processing_time, response_processing_time and count of request type
+- last 15 min count of different elb_status_codes and backend_status_code
+- sum of last 15 min received bytes and sent bytes
+
 3. Predict the number of unique URL visits by a given IP
+
+### Solution:
+Modeling Approach:
+- Regression model is build to predict URL visit count for IPs based of the uses data available. However user
+demographic information would have made more sense for unique URL visit count prediction. As with the current model we
+can only make prediction for existing users.
+Variable list:
+- Sum of session_time, received bytes, sent bytes, request_processing_time, backend_processing_time and response_processing_time per IP
+
+### Solution section 2 general note:
+
+- Features are created in multiple steps. At each step features are vectorized and finally all the features are assembled
+together to create final feature vector.
+
+- All the continuous features are scaled
+
+- Train and test data is splitted in 70:30 ratio
+
+- GBTRegression model is used to generate the prediction
+
+- RMSE obtained on test data is printed at the end
+
+
+#######################################################################################################################
+
 
 ## Tools allowed (in no particular order):
 - Spark (any language, but prefer Scala or Java)

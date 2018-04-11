@@ -170,7 +170,7 @@ _model_input_1 = _pre_proc \
          ) \
     .na.fill(0.0)
 
-# _model_input_1.describe().show()
+_model_input_1.select(col("unique_URL_visit")).describe().show()
 
 feature_columns_1 = list(set(_model_input_1.columns) - set(["IP", "unique_URL_visit"]))
 
