@@ -35,11 +35,13 @@ however due to unavailability of any scalable time series methods regression is 
 - As data available was only for last few hours, variable are created using recent history. For
 example total load in last 1, 15, 60 and 120 min is created as variable. Similar approach has been taken for all other
 variables as well.
+
 Variable list:
-- last 1, 15, 60, 120 min total load
-- last 1, 15, 60, 120 min sum of request_processing_time, backend_processing_time, response_processing_time and count of request type
-- last 1, 15 min sum of elb_status_code and backend_status_code
-- last 1, 15 min sum of received bytes and sent bytes
+    - last 1, 15, 60, 120 min total load
+    - last 1, 15, 60, 120 min sum of request_processing_time, backend_processing_time, response_processing_time and count
+    of request type
+    - last 1, 15 min sum of elb_status_code and backend_status_code
+    - last 1, 15 min sum of received bytes and sent bytes
 
 2. Predict the session length for a given IP
 
@@ -48,12 +50,14 @@ Variable list:
 
 Modeling Approach:
 - Regression based generalized model is build for all the IPs to predict the length of any session.
+
 Variable list:
-- distinct URL visit count for the IP
-- session start hour as a categorical variable
-- last 15 min average of request_processing_time, backend_processing_time, response_processing_time and count of request types
-- last 15 min count of different elb_status_codes and backend_status_code
-- last 15 min sum of received bytes and sent bytes
+    - distinct URL visit count for the IP
+    - session start hour as a categorical variable
+    - last 15 min average of request_processing_time, backend_processing_time, response_processing_time and count of
+    request types
+    - last 15 min count of different elb_status_codes and backend_status_code
+    - last 15 min sum of received bytes and sent bytes
 
 3. Predict the number of unique URL visits by a given IP
 
@@ -64,8 +68,9 @@ Modeling Approach:
 - Regression model is build to predict URL visit count for IPs based of the uses data available. However user
 demographic information would have made more sense for unique URL visit count prediction. As with the current model we
 can only make prediction for existing users.
+
 Variable list:
-- Sum of session_time, received bytes, sent bytes, request_processing_time, backend_processing_time and response_processing_time per IP
+    - Sum of session_time, received bytes, sent bytes, request_processing_time, backend_processing_time and response_processing_time per IP
 
 ### Solution section 2 general note:
 
@@ -90,7 +95,7 @@ together to create final feature vector.
     - Try out different model to asses their performance
 
 
-#######################################################################################################################
+####################################################################################
 
 
 ## Tools allowed (in no particular order):
