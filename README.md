@@ -13,7 +13,8 @@ The challenge is to make make analytical observations about the data using the d
 
 4. Find the most engaged users, ie the IPs with the longest session times
 
-## Solution Section 1: https://github.com/raviy8408/WeblogChallenge/blob/master/solution_section_1.py
+## Solution Section 1:
+https://github.com/raviy8408/WeblogChallenge/blob/master/solution_section_1.py
 
 1. For any IP a session is defined as the gap between two consecutive requests should be less than 30 min. Column
 "sessionized" is added to indicate the session of each request.
@@ -24,15 +25,15 @@ The challenge is to make make analytical observations about the data using the d
 ## Section 2: Additional questions for Machine Learning Engineer (MLE) candidates:
 
 1. Predict the expected load (requests/second) in the next minute
-
-## Solution:
+**
+## Solution 1:
 Modeling Approach: As data available was only for last few hours, variable are created using recent history. For
 example total load in last 1, 15, 60 and 120 min is created as variable. Similar approach has been taken for all other
 variables as well.
 
 Features are created in multiple steps. At each step features are vectorized and finally all the features are merged
 together to
-
+**
 
 2. Predict the session length for a given IP
 
