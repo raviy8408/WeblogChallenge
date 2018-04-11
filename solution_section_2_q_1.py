@@ -13,13 +13,11 @@ TOpic: Section 2 question 1 Solution
 ###########################################################################################
 
 from pyspark.sql import SparkSession
-from pyspark.mllib.regression import *
 from pyspark.sql.functions import *
 from pyspark.sql.types import *
 from pyspark.sql.window import Window
 import sys
 from pyspark.ml.feature import VectorAssembler, StandardScaler
-from pyspark.ml.feature import Normalizer
 from pyspark.ml.regression import LinearRegression
 from pyspark.ml.regression import GBTRegressor
 from math import sqrt
@@ -34,20 +32,16 @@ sc = spark.sparkContext
 sc.setLogLevel("ERROR")
 sc.setCheckpointDir('C://Users/Ravi/PycharmProjects/WeblogChallenge/checkpoint/')
 
-# print(sc)
-
 REPARTITION_FACTOR = int(sc._jsc.sc().getExecutorMemoryStatus().size()) * 10
 # print(REPARTITION_FACTOR)
 
 # UTILS FUNCTIONS
 _minutesLambda = lambda i: i * 60
-
 ###########################################################################################3
 
 ###########################################################################################3
 # DATA INGESTION
 ###########################################################################################3
-
 raw_data = spark.read.option("delimiter", " ").csv("C://Users/Ravi/PycharmProjects/WeblogChallenge/data")
 # .sample(False, 0.00001, 42)
 
@@ -183,7 +177,6 @@ _model_input_1_feature_set = assembler_1.transform(_model_input_1_feature_set_to
     .select("date", "hour", "minute", "load", "feature_1")
 
 # _model_input_1_feature_set.show(5)
-
 #############################################################################
 # -- FEATURE SET 2
 #############################################################################
@@ -235,7 +228,6 @@ _model_input_2_feature_set = assembler_2.transform(_model_input_2_feature_set_to
     .select("date", "hour", "minute", "feature_2")
 
 # _model_input_2_feature_set.show(5)
-
 #############################################################################
 # -- FEATURE SET 3
 #############################################################################
@@ -253,7 +245,7 @@ _initial_column_set_3 = set(_model_input_3.columns) - set(["date", "hour", "minu
 # print("_model_input_3 SCHEMA")
 # _model_input_3.printSchema()
 
-#################################3
+##############################################################################
 
 for col_name in list(set(_model_input_3.columns) - set(["date", "hour", "minute", "time"])):
 
@@ -270,7 +262,6 @@ for col_name in list(set(_model_input_3.columns) - set(["date", "hour", "minute"
 
 # print("_model_input_3 SCHEMA")
 # _model_input_3.printSchema()
-
 #############################################################################
 
 _final_column_set_3 = set(_model_input_3.columns) - _initial_column_set_3
@@ -280,8 +271,7 @@ _model_input_3_feature_set_to_assembler = _model_input_3 \
     .select(list(_final_column_set_3))
 
 feature_columns_3 = list(set(_model_input_3_feature_set_to_assembler.columns) - set(["date", "hour", "minute"]))
-
-#############################################################################33
+##############################################################################
 
 assembler_3 = VectorAssembler(inputCols=feature_columns_3,
                               outputCol="feature_3")
@@ -290,7 +280,6 @@ _model_input_3_feature_set = assembler_3.transform(_model_input_3_feature_set_to
     .select("date", "hour", "minute", "feature_3")
 
 # _model_input_3_feature_set.show(5)
-
 #############################################################################
 # -- FEATURE SET 4
 #############################################################################
@@ -298,8 +287,8 @@ print("Creating feature set 4...")
 _model_input_4 = _pre_proc \
     .select(col("date"), col("hour"), col("minute"), col("received_bytes"), col("sent_bytes")) \
     .groupBy(["date", "hour", "minute"]) \
-    .agg(mean(col("received_bytes").cast(FloatType())).alias("avg_received_bytes"),
-         mean(col("sent_bytes").cast(FloatType())).alias("avg_sent_bytes")) \
+    .agg(sum(col("received_bytes").cast(FloatType())).alias("avg_received_bytes"),
+         sum(col("sent_bytes").cast(FloatType())).alias("avg_sent_bytes")) \
     .repartition(REPARTITION_FACTOR) \
     .withColumn("time", to_timestamp(concat(col("date"), lit(" "), col("hour"), lit(":"), col("minute")),
                                      format="yyyy-MM-dd HH:mm"))
@@ -379,6 +368,7 @@ scalerModel = scaler.fit(_model_input_all_feature)
 _model_input_all_feature_scaled = scalerModel.transform(_model_input_all_feature)
 
 # _model_input_all_feature_normalized.show()
+########################################################################################
 
 ########################################################################################
 # --MODEL BUILDING

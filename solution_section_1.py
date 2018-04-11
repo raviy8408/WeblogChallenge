@@ -1,18 +1,16 @@
 """
-Author:
-Date:
-TOpic:
+Author: Ravi Kumar Yadav
+Date: 08/04/2018
+Topic: Section 1 Solution
 """
 
 ###########################################################################################3
 # COFIGURATION
 ###########################################################################################3
 from pyspark.sql import SparkSession
-from pyspark.mllib.regression import *
 from pyspark.sql.functions import *
 from pyspark.sql.types import *
 from pyspark.sql.window import Window
-import sys
 
 spark = SparkSession.builder \
     .master("local[*]") \
@@ -24,10 +22,8 @@ sc = spark.sparkContext
 sc.setLogLevel("ERROR")
 
 REPARTITION_FACTOR = int(sc._jsc.sc().getExecutorMemoryStatus().size()) * 10
-print(REPARTITION_FACTOR)
-
+# print(REPARTITION_FACTOR)
 ###########################################################################################3
-
 
 ###########################################################################################3
 # DATA INGESTION
@@ -56,7 +52,6 @@ raw_data_w_cols = raw_data \
     .repartition(REPARTITION_FACTOR)
 
 # raw_data_w_cols.show()
-
 ##################################################################################
 
 ###########################################################################################

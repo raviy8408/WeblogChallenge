@@ -1,28 +1,28 @@
 """
-Author:
-Date:
-TOpic:
+Author: Ravi Kumar Yadav
+Date: 10/04/2018
+Topic: Section 2 question 2 Solution
 """
+###########################################################################################
+# SECTION 2 : Additional questions for Machine Learning Engineer (MLE) candidates:
+# Q2: Predict the session length for a given IP
+###########################################################################################
 
 ###########################################################################################3
 # COFIGURATION
 ###########################################################################################3
 
 from pyspark.sql import SparkSession
-from pyspark.mllib.regression import *
 from pyspark.sql.functions import *
 from pyspark.sql.types import *
 from pyspark.sql.window import Window
 import sys
 from pyspark.ml.feature import VectorAssembler, StandardScaler
-from pyspark.ml.feature import VectorIndexer
 from pyspark.ml.feature import StringIndexer
 from pyspark.ml.feature import OneHotEncoder
 from pyspark.ml.regression import LinearRegression
 from pyspark.ml.regression import GBTRegressor
 from math import sqrt
-
-# from pyspark.sql import HiveContext
 
 spark = SparkSession.builder \
     .master("local[*]") \
@@ -31,12 +31,9 @@ spark = SparkSession.builder \
     .getOrCreate()
 
 sc = spark.sparkContext
-# sqlContext = HiveContext(sc)
 
 sc.setLogLevel("ERROR")
 sc.setCheckpointDir('C://Users/Ravi/PycharmProjects/WeblogChallenge/checkpoint/')
-
-# print(sc)
 
 REPARTITION_FACTOR = int(sc._jsc.sc().getExecutorMemoryStatus().size()) * 10
 # print(REPARTITION_FACTOR)
@@ -45,7 +42,6 @@ REPARTITION_FACTOR = int(sc._jsc.sc().getExecutorMemoryStatus().size()) * 10
 _minutesLambda = lambda i: i * 60
 
 ###########################################################################################3
-
 
 ###########################################################################################3
 # DATA INGESTION
@@ -93,7 +89,6 @@ raw_data_w_cols_clean = raw_data_w_cols \
     .withColumnRenamed("backend_status_code_clean", "backend_status_code")
 
 # print(raw_data_w_cols_clean.select(col("user_agent")).distinct().show())
-
 
 print("Pre-processing Data...")
 _pre_proc = raw_data_w_cols_clean \
@@ -336,7 +331,6 @@ _model_input_3_feature_set = _session_start_date_hour_min \
 # -- FEATURE SET 4
 #############################################################################
 
-
 print("Creating feature set 4...")
 _model_input_4_temp_1 = _pre_proc \
     .groupBy(["date", "hour", "minute"]) \
@@ -351,7 +345,7 @@ _initial_column_set_4_temp_1 = set(_model_input_4_temp_1.columns) - set(["date",
 # print("_model_input_4_temp_1 SCHEMA")
 # _model_input_4_temp_1.printSchema()
 
-#################################4_temp_1
+##############################################################################
 
 for col_name in list(set(_model_input_4_temp_1.columns) - set(["date", "hour", "minute", "time"])):
 
@@ -400,7 +394,6 @@ _model_input_4_feature_set = _session_start_date_hour_min \
     .drop("date_hour_min")
 
 ################################################################################
-
 
 #############################################################################
 # -- FEATURE SET 5
@@ -493,6 +486,7 @@ _model_input_all_feature = assembler_continuous_var.transform(_complete_model_in
 # _model_input_all_feature.show(2)
 
 ########################################################################################
+print("Scaling features...")
 scaler = StandardScaler(inputCol="feature_continuous", outputCol="scaledFeatures",
                         withStd=True, withMean=True)
 
@@ -545,13 +539,13 @@ _test_pred = gbtModel.transform(testData).select("feature", "session_time", "pre
 # print("_train_pred SCHEMA")
 # _test_pred.printSchema()
 # _test_pred.catch()
-_test_pred.show(30)
+# _test_pred.show(30)
 
-# testMSE = _test_pred.rdd.map(lambda lp: (lp[1] - lp[2]) * (lp[1] - lp[2])).sum() / \
-#           float(_test_pred.count())
-#
-# print("\n####################################################################\n")
-# print('Test Root Mean Squared Error = ' + str(sqrt(testMSE)))
-# print("\n####################################################################\n")
+testMSE = _test_pred.rdd.map(lambda lp: (lp[1] - lp[2]) * (lp[1] - lp[2])).sum() / \
+          float(_test_pred.count())
 
-###########################################################################
+print("\n####################################################################\n")
+print('Test Root Mean Squared Error = ' + str(sqrt(testMSE)))
+print("\n####################################################################\n")
+
+#########################################################################################

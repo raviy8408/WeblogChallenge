@@ -5,7 +5,7 @@ Topic: Section 2 question 3 Solution
 """
 ###########################################################################################
 # SECTION 2 : Additional questions for Machine Learning Engineer (MLE) candidates:
-# Q1: Predict the expected load (requests/second) in the next minute
+# Q3: Predict the number of unique URL visits by a given IP
 ###########################################################################################
 
 ###########################################################################################
@@ -13,13 +13,10 @@ Topic: Section 2 question 3 Solution
 ###########################################################################################
 
 from pyspark.sql import SparkSession
-from pyspark.mllib.regression import *
 from pyspark.sql.functions import *
 from pyspark.sql.types import *
 from pyspark.sql.window import Window
-import sys
 from pyspark.ml.feature import VectorAssembler, StandardScaler
-from pyspark.ml.feature import Normalizer
 from pyspark.ml.regression import LinearRegression
 from pyspark.ml.regression import GBTRegressor
 from math import sqrt
@@ -33,8 +30,6 @@ sc = spark.sparkContext
 
 sc.setLogLevel("ERROR")
 sc.setCheckpointDir('C://Users/Ravi/PycharmProjects/WeblogChallenge/checkpoint/')
-
-# print(sc)
 
 REPARTITION_FACTOR = int(sc._jsc.sc().getExecutorMemoryStatus().size()) * 10
 # print(REPARTITION_FACTOR)
@@ -92,8 +87,6 @@ raw_data_w_cols_clean = raw_data_w_cols \
     .drop("backend_processing_time") \
     .drop("response_processing_time")
 
-# print(raw_data_w_cols_clean.select(col("user_agent")).distinct().show())
-
 #############################################################################
 # -- MODEL INPUT DATA PREP
 #############################################################################
@@ -133,7 +126,6 @@ _pre_proc = raw_data_w_cols_clean \
 #############################################################################
 # -- FEATURE SET 1
 #############################################################################
-
 print("Creating feature set 1...")
 _model_input_1 = _pre_proc \
     .withColumn("session_start_time", min("unix_tmpstmp").over(
@@ -280,6 +272,8 @@ _model_input_all_feature = assembler.transform(_complete_model_input) \
 # _model_input_all_feature.printSchema()
 # _model_input_all_feature.show(2)
 
+########################################################################################
+# -- Feature scaling
 ########################################################################################
 print("Scaling features...")
 scaler = StandardScaler(inputCol="feature", outputCol="scaledFeatures",

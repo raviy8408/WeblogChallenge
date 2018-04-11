@@ -27,6 +27,7 @@ The challenge is to make make analytical observations about the data using the d
 1. Predict the expected load (requests/second) in the next minute
 
 ### Solution:
+[solution_section_2_q_1.py](https://github.com/raviy8408/WeblogChallenge/blob/master/solution_section_2_q_1.py)
 Modeling Approach:
 - Problem is solved using regression method. Although the problem could have also been solved using time series modeling,
 however due to unavailability of any scalable time series methods regression is chosen.
@@ -34,25 +35,27 @@ however due to unavailability of any scalable time series methods regression is 
 example total load in last 1, 15, 60 and 120 min is created as variable. Similar approach has been taken for all other
 variables as well.
 Variable list:
-- sum of last 1, 15, 60, 120 min request_processing_time, backend_processing_time, response_processing_time and count of request type
-- sum of last 1, 15 min elb_status_code and backend_status_code
-- sum of last 1, 15 min received bytes and sent bytes
+- last 1, 15, 60, 120 min total load
+- last 1, 15, 60, 120 min sum of request_processing_time, backend_processing_time, response_processing_time and count of request type
+- last 1, 15 min sum of elb_status_code and backend_status_code
+- last 1, 15 min sum of received bytes and sent bytes
 
 2. Predict the session length for a given IP
 
 ### Solution:
-Modeling Approach:
+Modeling Approach: [solution_section_2_q_2.py](https://github.com/raviy8408/WeblogChallenge/blob/master/solution_section_2_q_2.py)
 - Regression based generalized model is build for all the IPs to predict the length of any session.
 Variable list:
 - distinct URL visit count for the IP
 - session start hour as a categorical variable
-- last 15 min average of request_processing_time, backend_processing_time, response_processing_time and count of request type
+- last 15 min average of request_processing_time, backend_processing_time, response_processing_time and count of request types
 - last 15 min count of different elb_status_codes and backend_status_code
-- sum of last 15 min received bytes and sent bytes
+- last 15 min sum of received bytes and sent bytes
 
 3. Predict the number of unique URL visits by a given IP
 
 ### Solution:
+[solution_section_2_q_3.py](https://github.com/raviy8408/WeblogChallenge/blob/master/solution_section_2_q_3.py)
 Modeling Approach:
 - Regression model is build to predict URL visit count for IPs based of the uses data available. However user
 demographic information would have made more sense for unique URL visit count prediction. As with the current model we
@@ -65,13 +68,22 @@ Variable list:
 - Features are created in multiple steps. At each step features are vectorized and finally all the features are assembled
 together to create final feature vector.
 
-- All the continuous features are scaled
+- All the continuous features are scaled.
 
-- Train and test data is splitted in 70:30 ratio
+- Train and test data is splitted in 70:30 ratio.
 
-- GBTRegression model is used to generate the prediction
+- GBTRegression model is used to generate the prediction.
 
-- RMSE obtained on test data is printed at the end
+- RMSE obtained on test data will print at the bottom.
+
+### Solution Limitations:
+- Current solution does not focus on accuracy
+- Focus has been on implementing scalable solution
+- Given better computational resource following can be done to improve the accuracy:
+    - Several new features can be added
+    - Implement variable dimensionality reduction techniques
+    - Cross validation for the model to identify best parameter set
+    - Try out different model to asses their performance
 
 
 #######################################################################################################################
