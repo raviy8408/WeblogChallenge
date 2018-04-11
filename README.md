@@ -28,6 +28,7 @@ The challenge is to make make analytical observations about the data using the d
 
 ### Solution:
 [solution_section_2_q_1.py](https://github.com/raviy8408/WeblogChallenge/blob/master/solution_section_2_q_1.py)
+
 Modeling Approach:
 - Problem is solved using regression method. Although the problem could have also been solved using time series modeling,
 however due to unavailability of any scalable time series methods regression is chosen.

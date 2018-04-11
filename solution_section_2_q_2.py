@@ -324,7 +324,6 @@ _model_input_3_temp_1_feature_set = assembler_3_temp_1.transform(_model_input_3_
 _model_input_3_feature_set = _session_start_date_hour_min \
     .join(_model_input_3_temp_1_feature_set, "date_hour_min", how="left") \
     .drop("date_hour_min")
-
 ################################################################################
 
 #############################################################################

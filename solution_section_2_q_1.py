@@ -244,7 +244,6 @@ _initial_column_set_3 = set(_model_input_3.columns) - set(["date", "hour", "minu
 
 # print("_model_input_3 SCHEMA")
 # _model_input_3.printSchema()
-
 ##############################################################################
 
 for col_name in list(set(_model_input_3.columns) - set(["date", "hour", "minute", "time"])):
@@ -333,7 +332,6 @@ _model_input_4_feature_set = assembler_4.transform(_model_input_4_feature_set_to
     .select("date", "hour", "minute", "feature_4")
 
 # _model_input_4_feature_set.show(5)
-
 ##################################################################################
 # -- FINAL MODEL INPUT DATA COMBINING FEATURE SET 1,2,3,4
 ##################################################################################
@@ -357,7 +355,6 @@ _model_input_all_feature = assembler.transform(_complete_model_input) \
 # print("_model_input_all_feature SCHEMA")
 # _model_input_all_feature.printSchema()
 # _model_input_all_feature.show(2)
-
 ########################################################################################
 
 scaler = StandardScaler(inputCol="feature", outputCol="scaledFeatures",

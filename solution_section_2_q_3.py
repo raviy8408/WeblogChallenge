@@ -39,7 +39,6 @@ REPARTITION_FACTOR = int(sc._jsc.sc().getExecutorMemoryStatus().size()) * 10
 ###########################################################################################3
 # DATA INGESTION
 ###########################################################################################3
-
 raw_data = spark.read.option("delimiter", " ").csv("C://Users/Ravi/PycharmProjects/WeblogChallenge/data")
 # .sample(False, 0.0001, 42)
 
@@ -122,7 +121,6 @@ _pre_proc = raw_data_w_cols_clean \
 
 # _pre_proc.select(min(col("unix_tmpstmp")),max(col("unix_tmpstmp"))).show()
 # _pre_proc.select(col("hour"), col("minute")).distinct().orderBy("hour").show(110)
-
 #############################################################################
 # -- FEATURE SET 1
 #############################################################################
@@ -199,7 +197,6 @@ _model_input_2_feature_set = assembler_2.transform(_model_input_2) \
     .select("IP", "feature_2")
 
 # _model_input_2_feature_set.show(5)
-
 #############################################################################
 # -- FEATURE SET 3
 #############################################################################
@@ -223,7 +220,6 @@ _model_input_3_feature_set = assembler_3.transform(_model_input_3) \
     .select("IP", "feature_3")
 
 # _model_input_3_feature_set.show(5)
-
 #############################################################################
 # -- FEATURE SET 4
 #############################################################################
@@ -247,7 +243,6 @@ _model_input_4_feature_set = assembler_4.transform(_model_input_4) \
     .select("IP", "feature_4")
 
 # _model_input_3_feature_set.show(5)
-
 ##################################################################################
 # -- FINAL MODEL INPUT DATA COMBINING FEATURE SET 1,2,3
 ##################################################################################
@@ -271,7 +266,6 @@ _model_input_all_feature = assembler.transform(_complete_model_input) \
 # print("_model_input_all_feature SCHEMA")
 # _model_input_all_feature.printSchema()
 # _model_input_all_feature.show(2)
-
 ########################################################################################
 # -- Feature scaling
 ########################################################################################
@@ -286,7 +280,6 @@ _model_input_all_feature_scaled = scalerModel.transform(_model_input_all_feature
     .repartition(REPARTITION_FACTOR)
 
 # _model_input_all_feature_scaled.show()
-
 ########################################################################################
 
 ########################################################################################
