@@ -6,6 +6,10 @@ The challenge is to make make analytical observations about the data using the d
 ## Processing & Analytical goals:
 
 1. Sessionize the web log by IP. Sessionize = aggregrate all page hits by visitor/IP during a fixed time window.
+<p style='color:red'>
+    ###Solution:
+    code: https://github.com/raviy8408/WeblogChallenge/blob/master/solution_section_1.py
+    </p>
 
 2. Determine the average session time
 
